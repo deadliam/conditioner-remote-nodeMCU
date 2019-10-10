@@ -38,11 +38,11 @@
 const int oneWireBus = D1;
 
 int lastState = 1;
-
 int tempMin;
 int tempMax;
 int setTemperature;
 int tempSave;
+int onOffState = 0;
 
 char auth[] = "sUbjhUyB35sGgUhK_GHVPc3FSsUGKgnG";
 const char *ssid =  "Xiaomi_236D";
@@ -53,7 +53,6 @@ IRCoolixAC ac(kIrLed);  // Set the GPIO to be used to sending the message.
 BlynkTimer timer;
 
 WiFiClient client;
-//WidgetLED led1(V1);
 
 // Setup a oneWire instance to communicate with any OneWire devices
 OneWire oneWire(oneWireBus);
@@ -72,28 +71,41 @@ BLYNK_WRITE(V3)
 {   
   setTemperature = param.asInt();
 }
+BLYNK_WRITE(V4) // Button Widget On Conditioner
+{
+  if(param.asInt() == 1) {     // if Button sends 1
+    ac.setPower(true);
+    ac.send();
+    lastState = 1;
+    onOffState = 1;
+  }
+}
+BLYNK_WRITE(V5) // Button Widget Off Conditioner
+{
+  if(param.asInt() == 1) {     // if Button sends 1
+    ac.setPower(false);
+    ac.send();
+    lastState = 0;
+    onOffState = 0;
+  }
+}
 
 void myTimerEvent()
 { 
   Blynk.syncAll();
-  Serial.print(tempSave);
-  Serial.print(" : ");
-  Serial.println(setTemperature);
-  
   float sensorData = sensors.getTempCByIndex(0);
   Serial.print("Temp: ");
   Serial.println(sensorData);
   Blynk.virtualWrite(V0, sensorData);
   if (tempSave != setTemperature)
   {
-    Serial.print("SET: ");
-    Serial.println(setTemperature);
+//    Serial.print("SET: ");
+//    Serial.println(setTemperature);
     ac.setTemp(setTemperature);
     ac.send();
   }
-  if (sensorData > tempMin && sensorData < tempMax)
+  if ((sensorData > tempMin && sensorData < tempMax) || onOffState == 0)
   {
-//    Serial.println("In Range");
     return;  
   }
 
@@ -102,6 +114,7 @@ void myTimerEvent()
     Serial.println("temp < MIN");
     Serial.println(tempMin);
     ac.setPower(true);
+    ac.send();
 //    ac.setFan(kCoolixFanAuto);
 //    ac.setMode(kCoolixAuto);
     lastState = 1;
@@ -144,13 +157,15 @@ void setup()
 
 void loop() 
 {
-  // TODO:
-  // Control temp by Blynk
-  // On/Off by Blynk
+  Serial.print("MIN: ");
+  Serial.print(tempMin);
+  Serial.print(" | MAX: ");
+  Serial.println(tempMax);
+  
   tempSave = setTemperature;
-  sensors.requestTemperatures(); 
+  sensors.requestTemperatures();
   Blynk.run();
-  timer.run(); 
+  timer.run();
   delay(5000);
   
 //#if SEND_COOLIX
