@@ -75,6 +75,8 @@ BLYNK_WRITE(V4) // Button Widget On Conditioner
 {
   if(param.asInt() == 1) {     // if Button sends 1
     ac.setPower(true);
+    ac.setFan(kCoolixFanAuto);
+    ac.setMode(kCoolixAuto);
     ac.send();
     lastState = 1;
     onOffState = 1;
@@ -94,13 +96,13 @@ void myTimerEvent()
 { 
   Blynk.syncAll();
   float sensorData = sensors.getTempCByIndex(0);
-  Serial.print("Temp: ");
+  Serial.print("Current temp: ");
   Serial.println(sensorData);
   Blynk.virtualWrite(V0, sensorData);
   if (tempSave != setTemperature)
   {
-//    Serial.print("SET: ");
-//    Serial.println(setTemperature);
+    ac.setFan(kCoolixFanAuto);
+    ac.setMode(kCoolixAuto);
     ac.setTemp(setTemperature);
     ac.send();
   }
@@ -114,12 +116,13 @@ void myTimerEvent()
     Serial.println("temp < MIN");
     Serial.println(tempMin);
     ac.setPower(true);
+    ac.setFan(kCoolixFanAuto);
+    ac.setMode(kCoolixAuto);
     ac.send();
-//    ac.setFan(kCoolixFanAuto);
-//    ac.setMode(kCoolixAuto);
+
     lastState = 1;
   } 
-  if (sensorData >= tempMax && lastState == 1)
+  if (sensorData > tempMax && lastState == 1)
   {
     Serial.println("temp > MAX");
     Serial.println(tempMax);
@@ -161,12 +164,14 @@ void loop()
   Serial.print(tempMin);
   Serial.print(" | MAX: ");
   Serial.println(tempMax);
+  Serial.print("State: ");
+  Serial.println(onOffState);
   
   tempSave = setTemperature;
   sensors.requestTemperatures();
   Blynk.run();
   timer.run();
-  delay(5000);
+  delay(3000);
   
 //#if SEND_COOLIX
   // Now send the IR signal.
