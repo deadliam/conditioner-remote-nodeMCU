@@ -30,7 +30,7 @@ int setTemperature = 0;
 int tempSave = 0;
 int conditionState = 0;
 int climateState = 0;
-int lastState = 0;
+int THRESHOLD = 2;
 
 char auth[] = "sUbjhUyB35sGgUhK_GHVPc3FSsUGKgnG";
 const char *ssid =  "Xiaomi_236D";
@@ -120,8 +120,8 @@ void myTimerEvent()
     return;
   }
 
-  if ((sensorData < float(tempMin) + 2) && (sensorData > float(tempMin))) {
-    Serial.println("THRESHOLD");
+  if ((sensorData < float(tempMin) + THRESHOLD) && (sensorData > float(tempMin))) {
+    Serial.println("SKIP");
     return;
   }
     
@@ -133,9 +133,9 @@ void myTimerEvent()
   }
 
   // Turn Off by max temp
-  if (sensorData > float(tempMin) + 2 && conditionState == 1) {
+  if (sensorData >= float(tempMin) + THRESHOLD && conditionState == 1) {
     Serial.print("CURRENT_TEMP > MAX --- ");
-    Serial.println(tempMin + 2);
+    Serial.println(tempMin + THRESHOLD);
     conditionerAction(false);
   }
 }
