@@ -1,27 +1,4 @@
-/* Copyright 2017, 2018 crankyoldgit
-* An IR LED circuit *MUST* be connected to the ESP8266 on a pin
-* as specified by kIrLed below.
-*
-* TL;DR: The IR LED needs to be driven by a transistor for a good result.
-*
-* Suggested circuit:
-*     https://github.com/crankyoldgit/IRremoteESP8266/wiki#ir-sending
-*
-* Common mistakes & tips:
-*   * Don't just connect the IR LED directly to the pin, it won't
-*     have enough current to drive the IR LED effectively.
-*   * Make sure you have the IR LED polarity correct.
-*     See: https://learn.sparkfun.com/tutorials/polarity/diode-and-led-polarity
-*   * Typical digital camera/phones can be used to see if the IR LED is flashed.
-*     Replace the IR LED with a normal LED if you don't have a digital camera
-*     when debugging.
-*   * Avoid using the following pins unless you really know what you are doing:
-*     * Pin 0/D3: Can interfere with the boot/program mode & support circuits.
-*     * Pin 1/TX/TXD0: Any serial transmissions from the ESP8266 will interfere.
-*     * Pin 3/RX/RXD0: Any serial transmissions to the ESP8266 will interfere.
-*   * ESP-01 modules are tricky. We suggest you use a module with more GPIOs
-*     for your first time. e.g. ESP-12 etc.
-*/
+
 #define BLYNK_PRINT Serial
 #include <ESP8266WiFi.h>
 #include <BlynkSimpleEsp8266.h>
@@ -34,15 +11,26 @@
 #include <OneWire.h>
 #include <DallasTemperature.h>
 
+#define AUTO_MODE kCoolixAuto
+#define COOL_MODE kCoolixCool
+#define DRY_MODE kCoolixDry
+#define HEAT_MODE kCoolixHeat
+#define FAN_MODE kCoolixFan
+
+#define FAN_AUTO kCoolixFanAuto
+#define FAN_MIN kCoolixFanMin
+#define FAN_MED kCoolixFanMed
+#define FAN_HI kCoolixFanMax
+
 // GPIO where the DS18B20 is connected to
 const int oneWireBus = D1;
 
-int lastState = 1;
-int tempMin;
-int tempMax;
-int setTemperature;
-int tempSave;
-int onOffState = 0;
+int tempMin = 0;
+int setTemperature = 0;
+int tempSave = 0;
+int conditionState = 0;
+int climateState = 0;
+int lastState = 0;
 
 char auth[] = "sUbjhUyB35sGgUhK_GHVPc3FSsUGKgnG";
 const char *ssid =  "Xiaomi_236D";
@@ -55,81 +43,117 @@ BlynkTimer timer;
 WiFiClient client;
 
 // Setup a oneWire instance to communicate with any OneWire devices
+// Pass our oneWire reference to Dallas Temperature sensor // Pass our oneWire reference to Dallas Temperature sensor 
 OneWire oneWire(oneWireBus);
-// Pass our oneWire reference to Dallas Temperature sensor 
 DallasTemperature sensors(&oneWire);
 
 BLYNK_WRITE(V1) 
 {   
   tempMin = param.asInt();
 }
-BLYNK_WRITE(V2) 
-{   
-  tempMax = param.asInt();
-}
+
 BLYNK_WRITE(V3) 
 {   
   setTemperature = param.asInt();
 }
+
 BLYNK_WRITE(V4) // Button Widget On Conditioner
-{
+{ 
   if(param.asInt() == 1) {     // if Button sends 1
-    ac.setPower(true);
-    ac.setFan(kCoolixFanAuto);
-    ac.setMode(kCoolixAuto);
-    ac.send();
-    lastState = 1;
-    onOffState = 1;
+    if(conditionState == 0) {
+      conditionerAction(true);
+    }
+  } else {
+    if(conditionState != 0 && climateState == 0) {
+      conditionerAction(false);
+//      Blynk.virtualWrite(V5, 0); 
+    }
   }
 }
-BLYNK_WRITE(V5) // Button Widget Off Conditioner
-{
-  if(param.asInt() == 1) {     // if Button sends 1
-    ac.setPower(false);
-    ac.send();
-    lastState = 0;
-    onOffState = 0;
+
+BLYNK_WRITE(V5) // Button Widget On Climate control
+{ 
+  if(param.asInt() == 1) {
+    climateState = 1;
+//    if(conditionState == 0) {
+//      conditionerAction(true);
+//      Blynk.virtualWrite(V4, 1);
+//    }
+  } else {
+    climateState = 0;
   }
 }
 
 void myTimerEvent()
 { 
   Blynk.syncAll();
+  if(setTemperature == 0 || tempMin == 0) {
+    return;
+  }
+  sensors.requestTemperatures();
   float sensorData = sensors.getTempCByIndex(0);
-  Serial.print("Current temp: ");
-  Serial.println(sensorData);
   Blynk.virtualWrite(V0, sensorData);
-  if (tempSave != setTemperature)
-  {
-    ac.setFan(kCoolixFanAuto);
-    ac.setMode(kCoolixAuto);
+
+  Serial.print("SENSOR: ");
+  Serial.print(sensorData);
+  Serial.print(" | SET MIN: ");
+  Serial.print(tempMin);
+  Serial.print(" | SET TEMP: ");
+  Serial.print(tempSave);
+  Serial.print(" || COND: ");
+  Serial.print(conditionState);
+  Serial.print(" | CLIM: ");
+  Serial.println(climateState);
+  
+
+  // Set temp
+  if (tempSave != setTemperature && conditionState == 1) {
     ac.setTemp(setTemperature);
     ac.send();
+    Serial.print("SET TEMP: ");
+    Serial.println(setTemperature);
   }
-  if ((sensorData > tempMin && sensorData < tempMax) || onOffState == 0)
-  {
-    return;  
+  tempSave = setTemperature;
+
+  if (climateState == 0) {
+    Serial.println("Climate is OFF");
+    return;
   }
 
-  if (sensorData <= tempMin && lastState == 0)
-  {
-    Serial.println("temp < MIN");
+  if ((sensorData < float(tempMin) + 2) && (sensorData > float(tempMin))) {
+    Serial.println("THRESHOLD");
+    return;
+  }
+    
+  // Turn On by min temp
+  if (sensorData <= float(tempMin) && conditionState == 0) {
+    Serial.print("CURRENT_TEMP < MIN --- ");
     Serial.println(tempMin);
-    ac.setPower(true);
-    ac.setFan(kCoolixFanAuto);
-    ac.setMode(kCoolixAuto);
-    ac.send();
-
-    lastState = 1;
-  } 
-  if (sensorData > tempMax && lastState == 1)
-  {
-    Serial.println("temp > MAX");
-    Serial.println(tempMax);
-    ac.setPower(false);
-    ac.send();
-    lastState = 0;
+    conditionerAction(true);
   }
+
+  // Turn Off by max temp
+  if (sensorData > float(tempMin) + 2 && conditionState == 1) {
+    Serial.print("CURRENT_TEMP > MAX --- ");
+    Serial.println(tempMin + 2);
+    conditionerAction(false);
+  }
+}
+
+void conditionerAction(bool action)
+{ 
+  if(action == true) {
+    conditionState = 1;
+    Blynk.virtualWrite(V4, 1);
+  } else {
+    conditionState = 0;
+    Blynk.virtualWrite(V4, 0);
+  }
+  ac.setTemp(setTemperature);
+  ac.setMode(AUTO_MODE);
+  ac.setFan(FAN_AUTO);
+  ac.setPower(action);
+  ac.send();
 }
 
 void setup() 
@@ -156,19 +180,11 @@ void setup()
 
   Blynk.begin(auth, ssid, pass);
   timer.setInterval(1000L, myTimerEvent);
+  conditionerAction(false);
 }
 
 void loop() 
 {
-  Serial.print("MIN: ");
-  Serial.print(tempMin);
-  Serial.print(" | MAX: ");
-  Serial.println(tempMax);
-  Serial.print("State: ");
-  Serial.println(onOffState);
-  
-  tempSave = setTemperature;
-  sensors.requestTemperatures();
   Blynk.run();
   timer.run();
   delay(3000);
