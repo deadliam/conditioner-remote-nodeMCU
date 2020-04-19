@@ -120,7 +120,7 @@ void myTimerEvent()
     return;
   }
 
-  if ((sensorData < float(tempMin) + THRESHOLD) && (sensorData > float(tempMin))) {
+  if ((sensorData <= float(tempMin) + THRESHOLD) && (sensorData >= float(tempMin))) {
     Serial.println("SKIP");
     return;
   }
