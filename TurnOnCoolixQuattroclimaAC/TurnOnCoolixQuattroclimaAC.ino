@@ -30,7 +30,8 @@ int setTemperature = 0;
 int tempSave = 0;
 int conditionState = 0;
 int climateState = 0;
-int THRESHOLD = 2;
+int isActive = 0;
+int THRESHOLD = 1;
 
 char auth[] = "sUbjhUyB35sGgUhK_GHVPc3FSsUGKgnG";
 const char *ssid =  "Xiaomi_236D";
@@ -57,19 +58,19 @@ BLYNK_WRITE(V3)
   setTemperature = param.asInt();
 }
 
-BLYNK_WRITE(V4) // Button Widget On Conditioner
-{ 
-  if(param.asInt() == 1) {     // if Button sends 1
-    if(conditionState == 0) {
-      conditionerAction(true);
-    }
-  } else {
-    if(conditionState != 0 && climateState == 0) {
-      conditionerAction(false);
-//      Blynk.virtualWrite(V5, 0); 
-    }
-  }
-}
+//BLYNK_WRITE(V4) // Button Widget On Conditioner
+//{ 
+//  if(param.asInt() == 1) {     // if Button sends 1
+//    if(conditionState == 0) {
+//      conditionerAction(true);
+//    }
+//  } else {
+//    if(conditionState == 1 && climateState == 0) {
+//      conditionerAction(false);
+////      Blynk.virtualWrite(V5, 0); 
+//    }
+//  }
+//}
 
 BLYNK_WRITE(V5) // Button Widget On Climate control
 { 
@@ -81,15 +82,19 @@ BLYNK_WRITE(V5) // Button Widget On Climate control
 //    }
   } else {
     climateState = 0;
+    isActive = 0;
+    if(conditionState == 1) {
+      conditionerAction(false);
+    }
   }
 }
 
 void myTimerEvent()
 { 
   Blynk.syncAll();
-  if(setTemperature == 0 || tempMin == 0) {
-    return;
-  }
+//  if(setTemperature == 0 || tempMin == 0) {
+//    return;
+//  }
   sensors.requestTemperatures();
   float sensorData = sensors.getTempCByIndex(0);
   Blynk.virtualWrite(V0, sensorData);
@@ -103,7 +108,9 @@ void myTimerEvent()
   Serial.print(" || COND: ");
   Serial.print(conditionState);
   Serial.print(" | CLIM: ");
-  Serial.println(climateState);
+  Serial.print(climateState);
+  Serial.print(" | ACTIVE: ");
+  Serial.println(isActive);
   
 
   // Set temp
@@ -126,32 +133,39 @@ void myTimerEvent()
   }
     
   // Turn On by min temp
-  if (sensorData <= float(tempMin) && conditionState == 0) {
+  //  && conditionState == 0
+  if (sensorData <= float(tempMin) && climateState == 1 && isActive == 0) {
     Serial.print("CURRENT_TEMP < MIN --- ");
     Serial.println(tempMin);
     conditionerAction(true);
+    isActive = 1;
+    Serial.println("TURN ON");
   }
 
   // Turn Off by max temp
-  if (sensorData >= float(tempMin) + THRESHOLD && conditionState == 1) {
+  if (sensorData >= float(tempMin) + THRESHOLD && conditionState == 1 && isActive == 1) {
     Serial.print("CURRENT_TEMP > MAX --- ");
     Serial.println(tempMin + THRESHOLD);
     conditionerAction(false);
+    isActive = 0;
+    Serial.println("TURN OFF");
   }
+ 
+  Serial.println("END");
 }
 
 void conditionerAction(bool action)
 { 
   if(action == true) {
     conditionState = 1;
-    Blynk.virtualWrite(V4, 1);
+//    Blynk.virtualWrite(V4, 1);
   } else {
     conditionState = 0;
-    Blynk.virtualWrite(V4, 0);
+//    Blynk.virtualWrite(V4, 0);
   }
   ac.setTemp(setTemperature);
-  ac.setMode(AUTO_MODE);
-  ac.setFan(FAN_AUTO);
+  ac.setMode(HEAT_MODE);
+//  ac.setFan(FAN_AUTO);
   ac.setPower(action);
   ac.send();
 }
@@ -179,13 +193,27 @@ void setup()
   Serial.println(WiFi.localIP());
 
   Blynk.begin(auth, ssid, pass);
-  timer.setInterval(1000L, myTimerEvent);
+  timer.setInterval(2000L, myTimerEvent);
   conditionerAction(false);
 }
 
 void loop() 
 {
-  Blynk.run();
+  if (Blynk.connected()) {  
+  Blynk.run();  
+  }
+  else {
+//  Blynk.connectWifi(ssid, pass);
+    WiFi.begin(ssid, pass); 
+    while (WiFi.status() != WL_CONNECTED) 
+    {
+      delay(500);
+      Serial.println("");
+      Serial.print(".");
+    }
+    Blynk.config(auth);
+    Blynk.connect();
+  }
   timer.run();
   delay(3000);
   
