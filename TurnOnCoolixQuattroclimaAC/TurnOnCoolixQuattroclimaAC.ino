@@ -32,6 +32,7 @@ int conditionState = 0;
 int climateState = 0;
 int isActive = 0;
 int THRESHOLD = 1;
+int condMode = 0;
 
 char auth[] = "sUbjhUyB35sGgUhK_GHVPc3FSsUGKgnG";
 const char *ssid =  "Xiaomi_236D";
@@ -53,23 +54,10 @@ BLYNK_WRITE(V1)
   tempMin = param.asInt();
 }
 
-BLYNK_WRITE(V3) 
-{   
-  setTemperature = param.asInt();
-}
-
-//BLYNK_WRITE(V4) // Button Widget On Conditioner
-//{ 
-//  if(param.asInt() == 1) {     // if Button sends 1
-//    if(conditionState == 0) {
-//      conditionerAction(true);
-//    }
-//  } else {
-//    if(conditionState == 1 && climateState == 0) {
-//      conditionerAction(false);
-////      Blynk.virtualWrite(V5, 0); 
-//    }
-//  }
+// Possible to set temperature manually from widget
+//BLYNK_WRITE(V3) 
+//{   
+//  setTemperature = param.asInt();
 //}
 
 BLYNK_WRITE(V5) // Button Widget On Climate control
@@ -86,6 +74,19 @@ BLYNK_WRITE(V5) // Button Widget On Climate control
     if(conditionState == 1) {
       conditionerAction(false);
     }
+  }
+}
+
+BLYNK_WRITE(V6) // Button Widget Mode (cool or heat)
+{ 
+  if(param.asInt() == 1) {
+    // COOL
+    condMode = 0;
+    setTemperature = 22;
+  } else {
+    // HEAT
+    condMode = 1;
+    setTemperature = 30;
   }
 }
 
@@ -127,30 +128,60 @@ void myTimerEvent()
     return;
   }
 
-  if ((sensorData <= float(tempMin) + THRESHOLD) && (sensorData >= float(tempMin))) {
-    Serial.println("SKIP");
-    return;
-  }
-    
-  // Turn On by min temp
-  //  && conditionState == 0
-  if (sensorData <= float(tempMin) && climateState == 1 && isActive == 0) {
-    Serial.print("CURRENT_TEMP < MIN --- ");
-    Serial.println(tempMin);
-    conditionerAction(true);
-    isActive = 1;
-    Serial.println("TURN ON");
-  }
+  // HEAT
+  if (condMode == 1) {
+     
+    if ((sensorData <= float(tempMin) + THRESHOLD) && (sensorData >= float(tempMin))) {
+      Serial.println("SKIP");
+      return;
+    }
+      
+    // Turn On by min temp
+    //  && conditionState == 0
+    if (sensorData <= float(tempMin) && climateState == 1 && isActive == 0) {
+      Serial.print("CURRENT_TEMP < MIN --- ");
+      Serial.println(tempMin);
+      conditionerAction(true);
+      isActive = 1;
+      Serial.println("TURN ON");
+    }
+  
+    // Turn Off by max temp
+    if (sensorData >= float(tempMin) + THRESHOLD && conditionState == 1 && isActive == 1) {
+      Serial.print("CURRENT_TEMP > MAX --- ");
+      Serial.println(tempMin + THRESHOLD);
+      conditionerAction(false);
+      isActive = 0;
+      Serial.println("TURN OFF");
+    }
 
-  // Turn Off by max temp
-  if (sensorData >= float(tempMin) + THRESHOLD && conditionState == 1 && isActive == 1) {
-    Serial.print("CURRENT_TEMP > MAX --- ");
-    Serial.println(tempMin + THRESHOLD);
-    conditionerAction(false);
-    isActive = 0;
-    Serial.println("TURN OFF");
+  // COOL
+  } else {
+
+    if ((sensorData <= float(tempMin)) && (sensorData >= float(tempMin) - THRESHOLD)) {
+      Serial.println("SKIP");
+      return;
+    }
+      
+    // Turn On by max temp
+    //  && conditionState == 0
+    if (sensorData >= float(tempMin) && climateState == 1 && isActive == 0) {
+      Serial.print("CURRENT_TEMP < MIN --- ");
+      Serial.println(tempMin);
+      conditionerAction(true);
+      isActive = 1;
+      Serial.println("TURN ON");
+    }
+  
+    // Turn Off by min temp
+    if (sensorData <= float(tempMin) - THRESHOLD && conditionState == 1 && isActive == 1) {
+      Serial.print("CURRENT_TEMP > MAX --- ");
+      Serial.println(tempMin + THRESHOLD);
+      conditionerAction(false);
+      isActive = 0;
+      Serial.println("TURN OFF");
+    }
   }
- 
   Serial.println("END");
 }
 
@@ -164,7 +195,12 @@ void conditionerAction(bool action)
 //    Blynk.virtualWrite(V4, 0);
   }
   ac.setTemp(setTemperature);
-  ac.setMode(HEAT_MODE);
+  if (condMode == 1) {
+    ac.setMode(HEAT_MODE);
+  } else {
+    ac.setMode(COOL_MODE);
+    ac.setMode(FAN_MIN);
+  }
 //  ac.setFan(FAN_AUTO);
   ac.setPower(action);
   ac.send();
