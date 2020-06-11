@@ -25,7 +25,7 @@
 // GPIO where the DS18B20 is connected to
 const int oneWireBus = D1;
 
-int tempMin = 0;
+float tempMin = 0;
 int setTemperature = 0;
 int tempSave = 0;
 int conditionState = 0;
@@ -51,14 +51,14 @@ DallasTemperature sensors(&oneWire);
 
 BLYNK_WRITE(V1) 
 {   
-  tempMin = param.asInt();
+  tempMin = param.asFloat();
 }
 
 // Possible to set temperature manually from widget
-//BLYNK_WRITE(V3) 
-//{   
-//  setTemperature = param.asInt();
-//}
+BLYNK_WRITE(V3) 
+{   
+  setTemperature = param.asInt();
+}
 
 BLYNK_WRITE(V5) // Button Widget On Climate control
 { 
@@ -82,7 +82,6 @@ BLYNK_WRITE(V6) // Button Widget Mode (cool or heat)
   if(param.asInt() == 1) {
     // COOL
     condMode = 0;
-    setTemperature = 22;
   } else {
     // HEAT
     condMode = 1;
@@ -103,7 +102,7 @@ void myTimerEvent()
   Serial.print("SENSOR: ");
   Serial.print(sensorData);
   Serial.print(" | SET MIN: ");
-  Serial.print(tempMin);
+  Serial.print(float(tempMin));
   Serial.print(" | SET TEMP: ");
   Serial.print(tempSave);
   Serial.print(" || COND: ");
@@ -113,7 +112,10 @@ void myTimerEvent()
   Serial.print(" | ACTIVE: ");
   Serial.println(isActive);
   
-
+  if ((sensorData < 0) || (sensorData > 40)) {
+    Serial.println("Incorrect temperature data from sensor!");
+    return;
+  }
   // Set temp
   if (tempSave != setTemperature && conditionState == 1) {
     ac.setTemp(setTemperature);
@@ -122,6 +124,11 @@ void myTimerEvent()
     Serial.println(setTemperature);
   }
   tempSave = setTemperature;
+  if ((setTemperature < 20) || (setTemperature > 29)) {
+    ac.setFan(FAN_AUTO);
+  } else {
+    ac.setFan(FAN_MIN);
+  }
 
   if (climateState == 0) {
     Serial.println("Climate is OFF");
@@ -140,7 +147,7 @@ void myTimerEvent()
     //  && conditionState == 0
     if (sensorData <= float(tempMin) && climateState == 1 && isActive == 0) {
       Serial.print("CURRENT_TEMP < MIN --- ");
-      Serial.println(tempMin);
+      Serial.println(float(tempMin));
       conditionerAction(true);
       isActive = 1;
       Serial.println("TURN ON");
@@ -149,7 +156,7 @@ void myTimerEvent()
     // Turn Off by max temp
     if (sensorData >= float(tempMin) + THRESHOLD && conditionState == 1 && isActive == 1) {
       Serial.print("CURRENT_TEMP > MAX --- ");
-      Serial.println(tempMin + THRESHOLD);
+      Serial.println(float(tempMin) + THRESHOLD);
       conditionerAction(false);
       isActive = 0;
       Serial.println("TURN OFF");
@@ -167,7 +174,7 @@ void myTimerEvent()
     //  && conditionState == 0
     if (sensorData >= float(tempMin) && climateState == 1 && isActive == 0) {
       Serial.print("CURRENT_TEMP < MIN --- ");
-      Serial.println(tempMin);
+      Serial.println(float(tempMin));
       conditionerAction(true);
       isActive = 1;
       Serial.println("TURN ON");
@@ -176,13 +183,13 @@ void myTimerEvent()
     // Turn Off by min temp
     if (sensorData <= float(tempMin) - THRESHOLD && conditionState == 1 && isActive == 1) {
       Serial.print("CURRENT_TEMP > MAX --- ");
-      Serial.println(tempMin + THRESHOLD);
+      Serial.println(float(tempMin) + THRESHOLD);
       conditionerAction(false);
       isActive = 0;
       Serial.println("TURN OFF");
     }
   }
-  Serial.println("END");
+//  Serial.println("END");
 }
 
 void conditionerAction(bool action)
@@ -199,7 +206,6 @@ void conditionerAction(bool action)
     ac.setMode(HEAT_MODE);
   } else {
     ac.setMode(COOL_MODE);
-    ac.setMode(FAN_MIN);
   }
 //  ac.setFan(FAN_AUTO);
   ac.setPower(action);
