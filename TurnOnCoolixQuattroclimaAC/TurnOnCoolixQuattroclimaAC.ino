@@ -31,7 +31,7 @@ int tempSave = 0;
 int conditionState = 0;
 int climateState = 0;
 int isActive = 0;
-int THRESHOLD = 1;
+float THRESHOLD = 0.5;
 int condMode = 0;
 
 char auth[] = "sUbjhUyB35sGgUhK_GHVPc3FSsUGKgnG";
@@ -52,12 +52,19 @@ DallasTemperature sensors(&oneWire);
 BLYNK_WRITE(V1) 
 {   
   tempMin = param.asFloat();
+  if (tempMin >= 29)
+  {
+    setTemperature = 30;
+  } else if (tempMin < 29)
+  {
+    setTemperature = tempMin - 3;
+  }
 }
 
-// Possible to set temperature manually from widget
+// Possible to set temperature threshold
 BLYNK_WRITE(V3) 
 {   
-  setTemperature = param.asInt();
+  THRESHOLD = param.asFloat();
 }
 
 BLYNK_WRITE(V5) // Button Widget On Climate control
@@ -105,12 +112,15 @@ void myTimerEvent()
   Serial.print(float(tempMin));
   Serial.print(" | SET TEMP: ");
   Serial.print(tempSave);
+  Serial.print(" | THRESHOLD: ");
+  Serial.print(THRESHOLD);
   Serial.print(" || COND: ");
   Serial.print(conditionState);
   Serial.print(" | CLIM: ");
   Serial.print(climateState);
   Serial.print(" | ACTIVE: ");
   Serial.println(isActive);
+  
   
   if ((sensorData < 0) || (sensorData > 40)) {
     Serial.println("Incorrect temperature data from sensor!");
@@ -124,11 +134,6 @@ void myTimerEvent()
     Serial.println(setTemperature);
   }
   tempSave = setTemperature;
-  if ((setTemperature < 20) || (setTemperature > 29)) {
-    ac.setFan(FAN_AUTO);
-  } else {
-    ac.setFan(FAN_MIN);
-  }
 
   if (climateState == 0) {
     Serial.println("Climate is OFF");
@@ -194,6 +199,12 @@ void myTimerEvent()
 
 void conditionerAction(bool action)
 { 
+  if ((setTemperature < 20) || (setTemperature > 29)) {
+    ac.setFan(FAN_AUTO);
+  } else {
+    ac.setFan(FAN_MIN);
+  }
+  
   if(action == true) {
     conditionState = 1;
 //    Blynk.virtualWrite(V4, 1);
